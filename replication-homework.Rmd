@@ -1,0 +1,184 @@
+---
+title: "Replication Unified Democracy"
+author: "Ahmad Qabazard"
+date: "4/18/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##PART I
+
+##Load required packages
+```{r include=FALSE}
+library(devtools)
+library(tidyverse)
+library(haven)
+library(dplyr)
+```
+
+##Take look at the data
+```{r include=FALSE}
+PA_DTA_file <- read_dta("/Users/ahmad/Documents/University of Iowa /Computational Methods/Replication-Homework/replication-homework/PA_DTA_file.dta")
+#View(PA_DTA_file)
+uds_1000 <- read.csv("/Users/ahmad/Documents/University of Iowa /Computational Methods/Replication-Homework/replication-homework/uds_1000.csv")
+uds <- uds_1000 %>%
+mutate(id=cowcode)
+
+uds <- uds %>% 
+arrange(id, year) %>% 
+select(country, id, year, everything())
+
+#mydata <- left_join(PA_DTA_file, uds, by=c("id","year"))
+str(PA_DTA_file)
+str(uds$id)
+str(droplevels.data.frame(PA_DTA_file))
+PA_DTA_file[] <- lapply(PA_DTA_file, function(x) {attributes(x) <- NULL; x})
+mydata <- left_join(PA_DTA_file, uds, by=c("id", "year"))
+```
+
+## Drop variables not used (analysis 1976 - 1992) 
+```{r include=FALSE}
+dataset <- PA_DTA_file %>%
+  filter(year > "1974")
+dataset <- subset(dataset, dv1==1 & dv2==1 & dv3==1)
+```
+
+## Duplicates 
+
+The state dofile drops duplicates to "corrects problem in the initial UDS release." However, I did not find any duplicates. I will skip this step and revisit if problems arise. 
+
+##Panel corrected standard errors using pcse 
+```{r include=FALSE}
+#install.packages("pcse")
+library(pcse)
+pcse_table <- lm(polityiv ~ lag(pcaplog, 1) + lag(rgdppcgr, 1) + lag(open, 1) + lag(cpi, 1) + lag(prime, 1) + lag(second, 1) + lag(presiden, 1) + lag(parliamn, 1) + lag(bksfrac, 1), data = dataset)
+pcse <- pcse(pcse_table, groupN = dataset$id, groupT = dataset$year, pairwise = TRUE)
+```
+The pairwise command should have dealt with the issue of unbalanced data? Also no duplicates in the data. 
+
+```{r include=FALSE}
+duplicated(dataset$uniqueid)
+```
+
+##Panel corrected standard errors using plm 
+```{r include=FALSE}
+#install.packages("plm")
+library(plm)
+dataset1 <- dataset %>% 
+  mutate(l.pcaplog = lag(pcaplog, k=1),
+l.rgdppcgr = lag(rgdppcgr, k=1),
+l.open = lag(open, k=1),
+l.cpi = lag(cpi, k=1),
+l.prime = lag(prime, k=1),
+l.second = lag(second, k=1),
+l.presiden = lag(presiden, k=1),
+l.parliamn= lag(parliamn, k=1),
+l.bksfrac= lag(bksfrac, k=1))
+
+mydata_panel <- pdata.frame(dataset1, index =c("id", "year"))
+lm_model_panel <- plm(polityiv ~ l.pcaplog + l.rgdppcgr + l.open + l.cpi + l.prime + l.second + l.presiden + l.parliamn + l.bksfrac, data = mydata_panel, model = "pooling")
+summary(lm_model_panel)
+```
+
+```{r include=FALSE}
+mydata_panel <- pdata.frame(dataset, index =c("id", "year"))
+lm_model_panel <- plm(polityiv ~ lag(pcaplog, 1) + lag(rgdppcgr, 1) + lag(open, 1) + lag(cpi, 1) + lag(prime, 1) + lag(second, 1) + lag(presiden, 1) + lag(parliamn, 1) + lag(bksfrac, 1), data = mydata_panel, model = "pooling")
+summary(lm_model_panel)
+
+```
+
+##Declare data to be time series 
+```{r}
+ts(dataset1, start=c(1975), end=c(1992), frequency=1)
+dataset1 <- dataset %>% 
+  mutate(l.pcaplog = lag(pcaplog, k=1),
+l.rgdppcgr = lag(rgdppcgr, k=1),
+l.open = lag(open, k=1),
+l.cpi = lag(cpi, k=1),
+l.prime = lag(prime, k=1),
+l.second = lag(second, k=1),
+l.presiden = lag(presiden, k=1),
+l.parliamn= lag(parliamn, k=1),
+l.bksfrac= lag(bksfrac, k=1))
+
+mydata_panel <- pdata.frame(dataset1, index =c("id", "year"))
+lm_model_panel <- plm(polityiv ~ l.pcaplog + l.rgdppcgr + l.open + l.cpi + l.prime + l.second + l.presiden + l.parliamn + l.bksfrac, data = mydata_panel, model = "pooling")
+summary(lm_model_panel)
+
+
+pcse_table <- lm(polityiv ~ lag(pcaplog, 1) + lag(rgdppcgr, 1) + lag(open, 1) + lag(cpi, 1) + lag(prime, 1) + lag(second, 1) + lag(presiden, 1) + lag(parliamn, 1) + lag(bksfrac, 1), data = dataset1)
+pcse <- pcse(pcse_table, groupN = dataset1$id, groupT = dataset1$year, pairwise = TRUE)
+
+```
+
+
+##Prais-Winsten. Different model, but an alternative that works.
+
+```{r include=FALSE}
+#install.packages("prais")
+library(prais)
+polity <- prais_winsten(polityiv ~ lag(pcaplog, 1) + lag(rgdppcgr, 1) + lag(open, 1) + lag(cpi, 1) + lag(prime, 1) + lag(second, 1) + lag(presiden, 1) + lag(parliamn, 1) + lag(bksfrac, 1), data = dataset)
+summary(polity)
+
+vanhanen <- prais_winsten(polityiv ~ lag(pcaplog, 1) + lag(rgdppcgr, 1) + lag(open, 1) + lag(cpi, 1) + lag(prime, 1) + lag(second, 1) + lag(presiden, 1) + lag(parliamn, 1) + lag(bksfrac, 1), data = dataset)
+summary(vanhanen)
+
+freedom <- prais_winsten(polityiv ~ lag(pcaplog, 1) + lag(rgdppcgr, 1) + lag(open, 1) + lag(cpi, 1) + lag(prime, 1) + lag(second, 1) + lag(presiden, 1) + lag(parliamn, 1) + lag(bksfrac, 1), data = dataset)
+summary(freedom)
+```
+
+```{r include=FALSE }
+library("stargazer")
+stargazer(polity, vanhanen, freedom, 
+          type = "latex",
+          title="Casper and Tufis (2003) Table 1, Columns 5, 6, and 7.",
+align=TRUE, dep.var.labels=c("Polity", "Vanhanen", "Freedom House"),
+covariate.labels=c("GDP pc, logged","Real GDP pc growth",
+"Openness","Inflation","Primary Education","Secondary Education", "Presidential", "Parliamentary", "Party Fractionalization", "Constant"),
+omit.stat=c("LL","ser"), ci=TRUE)
+```
+
+
+##PART II 
+```{r include=FALSE }
+require(foreign)
+require(sandwich)
+require(lmtest)
+require(MASS)
+require(Hmisc)
+require(stargazer)
+require(sciplot)
+require(lme4)
+```
+
+```{r}
+dataset <- mydata %>%
+  filter(year > "1974")
+```
+
+
+
+```{r include=FALSE }
+# Load function to incorporate uncertainty (with robust standard errors)
+milm <- function(fml, midata){
+  xx <- terms(as.formula(fml))
+  lms <- matrix(data=NA, nrow=(length(attr(xx, "term.labels")) + 1), ncol=length(midata))
+  ses <- matrix(data=NA, nrow=(length(attr(xx, "term.labels")) + 1), ncol=length(midata))
+  vcovs <- list()
+  for(i in 1:length(midata)){
+    tmp <- lm(formula=as.formula(fml), data=midata[[i]])
+    lms[,i] <- tmp$coefficients
+    ses[,i] <- sqrt(diag(vcovHC(tmp, type = "HC")))
+    vcovs[[i]] <- vcovHC(tmp, type = "HC")
+  }
+  par.est <- apply(lms, 1, mean)
+  se.within <- apply(ses, 1, mean)
+  se.between <- apply(lms, 1, var)
+  se.est <- sqrt(se.within^2 + se.between*(1 + (1/length(midata))))
+  list("terms"=names(tmp$coefficients), "beta" = par.est, "SE"=se.est, "vcovs"=vcovs,"coefs" = lms)   
+}
+```
+
+##We need the dependent variable: mean of UDS' posterior densities  
